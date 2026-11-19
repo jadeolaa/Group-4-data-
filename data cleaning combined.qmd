@@ -1,0 +1,239 @@
+---
+title: "Cleaned combined dataset"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+```
+
+col_types - specifies the data type(class) that R should assign each column cols() - tells R the type of information each column has e.g. logical, character etc
+
+```{r}
+combined_data <- read_csv("combined_gene_data.csv",
+                          col_types = cols(.default = col_character())
+                          )
+glimpse(combined_data)
+View(combined_data)
+nrow(combined_data)
+
+```
+
+# SOP checklist
+
+```{r}
+mouse_life_stage_ok <- c("E9.5", "E12.5", "E15.5", "E18.5",
+            "Early adult", "Late adult", "Middle aged adult")
+
+lacz_values_ok <- c ("No data", "ambiguous", "expression", "imageOnly",
+              "no expression", "tissue not available")
+
+# normalise the values 
+norm <- function(x) {
+  x <- str_to_lower(x)
+  str_replace_all(x, "[^a-z0-9]", "") # any character that is not lowercase letter/ digit delete it and replace it with an empty text
+}
+  
+match_to_sop <- function(x, ok) {
+  ok[match(norm(x), norm(ok))]
+}
+
+
+cols5 <- c("gene_accession_id", "p_value", "mouse_life_stage",
+          "lacz_eye", "lacz_lung")
+```
+
+# audit
+
+```{r}
+# count the missing values within the 5 columns 
+colSums(is.na(combined_data[cols5])) 
+
+count(combined_data, mouse_life_stage, sort = TRUE) 
+count(combined_data, lacz_eye, sort = TRUE) 
+count(combined_data, lacz_lung, sort = TRUE)
+ 
+```
+
+# Clean columns
+
+check which values don't match the sop match to sop - compare the dataset values against the approved sop values count - see how many times each unmatched values appear and sort the results from most frequent to least frequent value unmatched values - values that cannot be matched to the approved SOP values
+
+```{r}
+# Check for unmatched values 
+combined_data |> 
+  filter(
+    !is.na(mouse_life_stage), 
+    is.na(match_to_sop(mouse_life_stage, mouse_life_stage_ok))
+  ) |> 
+  count(mouse_life_stage, sort = TRUE)
+```
+
+0 - all the non - missing values could be matched
+
+#Standarise
+
+```{r}
+combined_data <- combined_data |> 
+  mutate(
+    mouse_life_stage = match_to_sop(
+      mouse_life_stage,
+      mouse_life_stage_ok
+    )
+  )
+
+count(combined_data, mouse_life_stage, sort = TRUE)
+```
+
+# Check missing values
+
+```{r}
+sum(is.na(combined_data$mouse_life_stage))
+```
+
+# lacz_eye column
+
+```{r}
+# check for the unmatched values in lacz_eye 
+combined_data |> 
+  filter(
+    !is.na(lacz_eye),
+    is.na(match_to_sop(lacz_eye, lacz_values_ok))
+  ) |> 
+  count(lacz_eye, sort = TRUE)
+
+# Standarise
+combined_data <- combined_data |> 
+  mutate(
+    lacz_eye = match_to_sop(
+      lacz_eye,
+      lacz_values_ok
+    )
+  )
+
+count(combined_data, lacz_eye, sort = TRUE)
+sum(is.na(combined_data$lacz_eye))
+
+```
+
+## lacz_lung column
+
+```{r}
+# check for the unmatched values in lacz_lung 
+combined_data |> 
+  filter(
+    !is.na(lacz_lung),
+    is.na(match_to_sop(lacz_lung, lacz_values_ok))
+  ) |> 
+  count(lacz_lung, sort = TRUE)
+
+# Standarise
+combined_data <- combined_data |> 
+  mutate(
+    lacz_lung = match_to_sop(
+      lacz_lung,
+      lacz_values_ok
+    )
+  )
+
+count(combined_data, lacz_lung, sort = TRUE)
+sum(is.na(combined_data$lacz_lung))
+
+```
+
+# p value
+
+```{r}
+combined_data |> 
+  mutate(p_value_num = as.numeric(p_value)) |> 
+  filter(!is.na(p_value), is.na(p_value_num)) |> 
+  count(p_value, sort = TRUE)
+
+# Identify values outside the SOP range 
+combined_data |> 
+  mutate(p_value_num = as.numeric(p_value)) |> 
+  filter(
+    !is.na(p_value_num),
+    p_value_num < 0 | p_value_num > 1
+  ) |> 
+  count(p_value, sort = TRUE)
+
+combined_data |> 
+  filter(as.numeric(p_value) >1)
+
+# identify missing values 
+sum(is.na(combined_data$p_value))
+```
+
+# Gene accession id
+
+```{r}
+combined_data |> 
+  filter(
+    !is.na(gene_accession_id),
+    nchar(gene_accession_id) < 9 |
+      nchar(gene_accession_id) > 11
+  ) |> 
+  count(gene_accession_id, sort = TRUE)
+
+sum(is.na(combined_data$gene_accession_id))
+```
+
+filter for 88022
+
+```{r}
+combined_data |> 
+  filter(gene_accession_id == "88022")
+
+# correct the ID
+combined_data <- combined_data |> 
+mutate(
+  gene_accession_id = if_else(
+    gene_accession_id == "88022",
+    "MGI:88022",
+    gene_accession_id
+    )
+)
+
+# check the corrected ID
+combined_data |> 
+  count(gene_accession_id) |> 
+  filter(gene_accession_id == "MGI:88022")
+
+combined_data |> 
+  filter(
+    !is.na(gene_accession_id),
+    nchar(gene_accession_id) < 9 |
+      nchar(gene_accession_id) > 11
+  ) |> 
+  count(gene_accession_id, sort = TRUE)
+
+sum(is.na(combined_data$gene_accession_id))
+```
+
+```{r}
+colSums(is.na(combined_data[cols5])) 
+
+count(combined_data, mouse_life_stage, sort = TRUE)
+count(combined_data, lacz_eye, sort = TRUE)
+count(combined_data, lacz_lung, sort = TRUE)
+
+# check p value range 
+combined_data |> 
+  mutate(p_value_num = as.numeric(p_value)) |> 
+  summarise(
+    minimum = min(p_value_num, na.rm = TRUE),
+    maximum = max(p_value_num, na.rm = TRUE)
+  )
+
+```
+
+```{r}
+# View the five cleaned columns
+View(combined_data[cols5])
+nrow(combined_data[cols5])
+
+write_csv(combined_data, "cleaned_combined_data.csv")
+write_csv(combined_data[cols5], "cleaned_combined_data_Joy.csv")
+```

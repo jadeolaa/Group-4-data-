@@ -1,0 +1,156 @@
+---
+title: "Data cleaning group 4"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+
+library(tidyverse)
+library(readr)
+library(readxl)
+library(purrr)
+library(janitor)
+```
+
+# set path to data folder
+
+```{r}
+csv_files <- list.files(
+  path = "C:/Users/jadeo/OneDrive/Documents/group4_data",
+  pattern = "\\.csv$",
+  full.names = TRUE
+)
+# Display csv files 
+csv_files
+# count number of csv files 
+length(csv_files)
+```
+
+# read the first csv file
+
+```{r}
+test_file <- read_csv(
+csv_files[1],
+col_names = FALSE,
+show_col_types = FALSE
+)
+
+View(test_file)
+```
+
+# Convert rows into columns
+
+```{r}
+test_wide <- test_file |> 
+  pivot_wider(
+    names_from = X1,
+    values_from = X2
+  )
+
+View(test_wide)
+```
+
+# Create a function to read and reaarange each csv file
+
+```{r}
+read_gene <- function (file) {
+  data <- read_csv(
+    file,
+    col_names = FALSE,
+    col_types = cols(.default = col_character()),
+    show_col_types = FALSE
+  )
+  # Check if the file has 2 columns with values
+  if (ncol(data) == 2 && any(!is.na(data$X2)& data$X2 !="")) {
+  
+  #convert rows into columns 
+    wide_data <-data |> 
+      filter(!is.na(X1), X1!= "") |> 
+      pivot_wider(
+        names_from = X1,
+        values_from = X2
+      )
+    # Identify missing variable values 
+    missing <- data |> 
+      filter(is.na(X2) | X2 == "") |> 
+      pull(X1)
+    
+    # Add file name and processing status 
+    wide_data |> 
+      mutate(
+        file_name = basename(file),
+        file_status = ifelse(
+          length(missing) == 0,
+          "complete",
+          "incomplete_values"
+        ),
+        missing_fields = paste(missing, collapse = "; ")
+      )
+    
+  } else {
+    # Record files that contain no usable values 
+    tibble(
+      file_name = basename(file),
+      file_status = "missing_values",
+      missing_fields = paste(data$X1, collapse = "; ")
+    )
+    
+  }
+}
+  
+```
+
+# test the first and second csv
+
+# then apply function to all csv files
+
+```{r}
+test_function <- read_gene(csv_files[1]) 
+View(test_function)
+
+test_function2 <- read_gene(csv_files[2])
+View(test_function2)
+
+file_results <- map(csv_files, read_gene, .progress = TRUE)
+```
+
+# Combine the dataset into one
+
+```{r}
+combined_data <- bind_rows(file_results)
+dim(combined_data)
+str(combined_data)
+
+# count files by processing status 
+table(combined_data$file_status)
+
+# identify files with missing values 
+incomplete_files <- combined_data |> 
+  filter(file_status != "complete")
+
+View(incomplete_files)
+
+# Delete the last three rows in the incomplete files 
+incomplete_files <- incomplete_files[, 1:(ncol(incomplete_files) - 3)]
+
+# check the number of files processed 
+nrow(combined_data) 
+ncol(combined_data)
+view(combined_data)
+
+# Delete the last 3 NA rows in the combined data 
+combined_data <- combined_data[, 1:(ncol(combined_data) - 3)]
+
+```
+
+# save the combined dataset
+
+```{r}
+write_csv(
+  combined_data,
+   "C:/Users/jadeo/OneDrive/Documents/combined_gene_data.csv"
+)
+```
